@@ -160,7 +160,7 @@ contract DECEngine is ReentrancyGuard {
     }
     // Returns how close to liquidation a user is 
     // if a user goes below,1 then they can get liquidated
-    function _healthFacotr(address user) private view return(uint256){
+    function _healthFactor(address user) private view returns (uint256){
         (uint256 totalDscMinted, uint256 collateralValueInUsed) = _getAccountInformation(user);
         // return (collateralValueInUsd/totalDscMinted); 
         uint256 collateralAdjustedForThreshold = (collateralValueInUsd * LIQUIDATION_THRESHOLD)/ LIQUIDATION_PRECISION;
