@@ -60,6 +60,11 @@ contract DECEngine is ReentrancyGuard {
         address indexed token,
         uint256 indexed amount
     );
+    event CollateralRedeemed(
+        address indexed user,
+        address indexed token,
+        uint256 indexed amount
+    )
 
     //Modifier
     modifier moreThanZero(uint256) {
@@ -140,8 +145,19 @@ contract DECEngine is ReentrancyGuard {
             revert DSCEngine__TransferFailed();
         }
     }
+    //in order to redeem collateral
+    //1. health factor must be over collateral value than the min threshold
+    
+    function redeemCollateral(address tokenCollateralAddress, uint256 amountCollateral ) public moreThanZero(amountCollateral) nonReentrant{
+    s_collateralDeposited[msg.sender][tokenCollateralAddress] -= amountCollateral;
+    emit CollateralRedeemed(msg.sender,tokenCollateralAddress,amountCollateral);  
 
-    function redeemCollateral() external {}
+    bool success = IERC20(tokenCollateralAddress).transfer(msg.sender,amountCollateral);
+    if(!success){
+        revert DSCEngine__TransferFailed();
+    }  
+    _revertIFHealthFactorIsBroken(msg.sender);
+    }
 
     // @notice follows CEI
     // @param amountDscToMint The amount decentralized StableCoin to mint
@@ -158,9 +174,24 @@ contract DECEngine is ReentrancyGuard {
         }
     }
 
-    function redeemCollateralForDsc() external {}
+    function redeemCollateralForDsc(address tokenCollateralAddress, uint256 amountCollateral, uint256 amountDscToBurn) external {
+        
+        burnDsc(amountToBurn);
+        redeemCollateral(tokenCollateralAddress,amountCollateral);
+        
+    }
 
-    function burnDsc() external {}
+    function burnDsc(uint256 amount) public moreThanZero(amount) {
+       s__DSCMinted[msg.sender] -=amount; 
+
+       bool success = i_dsc.transferFrom(msg.sender, address(this),amount);
+       if(!success){
+        revert DSCEngine__TransferFailed();
+       }
+
+       i_dsc.burn(amount);
+       _revertIfHealthFactorIsBroken(msg.sender);
+    }
 
     function getHealthFactor() external view {}
 
