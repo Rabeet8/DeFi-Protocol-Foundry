@@ -39,6 +39,7 @@ contract DECEngine is ReentrancyGuard {
     error DSCEngine__BreakHealthFACTOR(unit256 healthFactor);
     error DSCEngine__MintFailed();
     error DSCEngine__HealthFactorOk();
+    error DSCEngine__HealthFactorNotImproved();
 
     //State Variable
     mapping(address token => address priceFeed) private s_priceFeeds; //tokenToPriceFeed
@@ -49,8 +50,8 @@ contract DECEngine is ReentrancyGuard {
     uint256 private constant PRECISION = 1e18;
     uint256 private constant LIQUIDATION_THRESHOLD = 50; //200% overcollateralized
     uint256 private constant LIQUIDATION_PRECISION = 100;
-    uint256 private constant MIN_HEALTH_FACTOR= 1e18;
-    uint256 private constant LIQUIDATION_BONUS = 10 //means 10% bonus
+    uint256 private constant MIN_HEALTH_FACTOR = 1e18;
+    uint256 private constant LIQUIDATION_BONUS = 10; //means 10% bonus
 
     address[] private s_collateralTokens;
 
@@ -63,9 +64,10 @@ contract DECEngine is ReentrancyGuard {
         uint256 indexed amount
     );
     event CollateralRedeemed(
-        address indexed user,
+        address indexed redeemedFrom,
+        address indexed redeemedTo,
         address indexed token,
-        uint256 indexed amount
+        uint25 indexed amount
     );
 
     //Modifier
@@ -154,22 +156,7 @@ contract DECEngine is ReentrancyGuard {
         address tokenCollateralAddress,
         uint256 amountCollateral
     ) public moreThanZero(amountCollateral) nonReentrant {
-        s_collateralDeposited[msg.sender][
-            tokenCollateralAddress
-        ] -= amountCollateral;
-        emit CollateralRedeemed(
-            msg.sender,
-            tokenCollateralAddress,
-            amountCollateral
-        );
-
-        bool success = IERC20(tokenCollateralAddress).transfer(
-            msg.sender,
-            amountCollateral
-        );
-        if (!success) {
-            revert DSCEngine__TransferFailed();
-        }
+        _redeemCollateral(msg.sender, tokenCollateralAddress, amountCollateral);
         _revertIFHealthFactorIsBroken(msg.sender);
     }
 
@@ -198,14 +185,7 @@ contract DECEngine is ReentrancyGuard {
     }
 
     function burnDsc(uint256 amount) public moreThanZero(amount) {
-        s__DSCMinted[msg.sender] -= amount;
-
-        bool success = i_dsc.transferFrom(msg.sender, address(this), amount);
-        if (!success) {
-            revert DSCEngine__TransferFailed();
-        }
-
-        i_dsc.burn(amount);
+        _burnDsc(amount, msg.sender, msg.sender);
         _revertIfHealthFactorIsBroken(msg.sender);
     }
     // param : collateral => The erc20 collateral address to liquidate from the user
@@ -222,27 +202,93 @@ contract DECEngine is ReentrancyGuard {
         uint256 debtToCover
     ) external moreThanZero(debtToCover) nonReentrant {
         uint256 startingUserHealthFactor = _healthFactor(user);
-        if(startingUserHealthFactor < MIN_HEALTH_FACTOR){
+        if (startingUserHealthFactor < MIN_HEALTH_FACTOR) {
             revert DSCEngine__HealthFactorOk();
         }
 
         // we want to burn their DSC "debt"
         // And take their collateral
         // 140 ETH,
-        uint256 tokenAmountFromDebtCovered == getTokenAmountFromUsd(collateral,debtToCover);
-        uint256 bonusCollateral = (tokenAmountFromDebtCovered * LIQUIDATION_BONUS) / LIQUIDATION_PRECISION;
-        uint256 totalCollateralToRedeem = tokenAmountFromuSD(collateral, debtToCover);
-    }
-    function getHealthFactor() external view {
+        uint256 tokenAmountFromDebtCovered = getTokenAmountFromUsd(
+            collateral,
+            debtToCover
+        );
+        uint256 bonusCollateral = (tokenAmountFromDebtCovered *
+            LIQUIDATION_BONUS) / LIQUIDATION_PRECISION;
+        uint256 totalCollateralToRedeem = tokenAmountFromDebtCovered +
+            bonusCollateral;
+        _redeemCollateral(
+            user,
+            msg.sender,
+            collateral,
+            totalCollateralToRedeem
+        );
+        _burnDsc(debtToCover, user, msg, sender);
+        uiunt256 endingUserHealthFactor = _healthFactor(user);
+        if (endingUserHealthFactor <= startingUserHealthFactor) {
+            revert DSCEngine__HealthFactorNotImproved();
+        }
 
+        _revertIfHealthFactorIsBroken(msg.sender);
     }
+
+    function getHealthFactor() external view {}
 
     //PRIVATE AND VIEW, INTERNAL FUNCTION
 
-    function getTokenAmountFromUsd(address token,uint256 usdAmountInWei) public view returns(uiunt256){
-        AggregatorV3Interface priceFeed = AggregatorV3Interface(s_priceFeeds[token]);
-        (,int256 price,,,) = priceFeed.latestRoundData();
-        return(usdAmountInWei * PRECISION)/(uint256(price) *ADDITIONAL_FEED_PRECISION);
+    function _burnDsc(
+        uint256 amountDscToBurn,
+        address onBehalfOf,
+        address dscFrom
+    ) private {
+        s__DSCMinted[onBehalfOf] -= amountDscToBurn;
+
+        bool success = i_dsc.transferFrom(
+            dscFrom,
+            address(this),
+            amountDscToBurn
+        );
+        if (!success) {
+            revert DSCEngine__TransferFailed();
+        }
+
+        i_dsc.burn(amount);
+    }
+
+    function _redeemCollateral(
+        address from,
+        address to,
+        address tokenCollateralAddress,
+        uint256 amountCollateral
+    ) internal {
+        s_collateralDeposited[from][tokenCollateralAddress] -= amountCollateral;
+        emit CollateralRedeemed(
+            from,
+            to,
+            tokenCollateralAddress,
+            amountCollateral
+        );
+
+        bool success = IERC20(tokenCollateralAddress).transfer(
+            to,
+            amountCollateral
+        );
+        if (!success) {
+            revert DSCEngine__TransferFailed();
+        }
+    }
+
+    function getTokenAmountFromUsd(
+        address token,
+        uint256 usdAmountInWei
+    ) public view returns (uiunt256) {
+        AggregatorV3Interface priceFeed = AggregatorV3Interface(
+            s_priceFeeds[token]
+        );
+        (, int256 price, , , ) = priceFeed.latestRoundData();
+        return
+            (usdAmountInWei * PRECISION) /
+            (uint256(price) * ADDITIONAL_FEED_PRECISION);
     }
 
     function _getAccountInformation(

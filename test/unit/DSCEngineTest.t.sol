@@ -8,8 +8,6 @@ import {DSCEngine} from "../../src/DSCEngine.sol";
 import {HelperConfig} from "../../script/HelperConfig.s.sol";
 import {ERC20Mock} from "@openzeppelin/contracts/mocks/ERC20Mock.sol";
 
-
-
 contract DSCEngineTest is Test {
     DeployDSC deloyer;
     DecentralizedStableCoin dsc;
@@ -19,7 +17,7 @@ contract DSCEngineTest is Test {
     address weth;
 
     address public user = makeAddr("user");
-    uint256 public constant AMOUNT_COLLATERAL =  10 ether;
+    uint256 public constant AMOUNT_COLLATERAL = 10 ether;
     uint256 public constant STARTING_ERC20_BALANCE = 10 ether;
 
     function setUp() public {
@@ -27,7 +25,7 @@ contract DSCEngineTest is Test {
         (dsc, dsce, config) = deployer.run();
         (ethUsdPriceFeed, , weth, , ) = config.activeNetworkConfig();
 
-        ERC20Mock(weth).mint(USER,)
+        ERC20Mock(weth).mint(USER);
     }
 
     //Price Tests
@@ -42,14 +40,13 @@ contract DSCEngineTest is Test {
 
     //deposit collateral tests
 
-    function testRevertIfCollateralZero() public{
-       vm.startPrank(USER);
-       ERC20Mock(weth).approve(address(dsce),AMOUNT_COLLATERAL);
+    function testRevertIfCollateralZero() public {
+        vm.startPrank(USER);
+        ERC20Mock(weth).approve(address(dsce), AMOUNT_COLLATERAL);
 
-       vm.expectRevert(DSCENGINE.DSCEngine__NeedsMoreThanZero.selector);
-       dsce.depositCollateral(weth,0);
+        vm.expectRevert(DSCENGINE.DSCEngine__NeedsMoreThanZero.selector);
+        dsce.depositCollateral(weth, 0);
 
-       vm.stopPrank();
-
+        vm.stopPrank();
     }
 }
