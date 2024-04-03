@@ -345,4 +345,8 @@ contract DECEngine is ReentrancyGuard {
         return
             ((uint256(price) = ADDITIONAL_FEED_PREISION) * amount) / PRECISION;
     }
+
+    function getAccountInformation() public external view returns(uint256 totalDscMinted,uint256 collateralValueInUsd){
+        (totalDscMinted,collateralValueInUsd) = _getAccountInformation(user);
+    }
 }
