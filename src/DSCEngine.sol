@@ -29,7 +29,7 @@ import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/interfaces/Ag
  * @notice This contract is very loosely based on the MakerDAO DSS (DAI) System
  */
 
-contract DECEngine is ReentrancyGuard {
+contract DSCEngine is ReentrancyGuard {
     //Error
     error DSCEngine__NeedsMoreThanZero();
     error DSCEngine__TokenAddressesAndPriceFeedAddressesMustBeSameLength();
@@ -346,7 +346,11 @@ contract DECEngine is ReentrancyGuard {
             ((uint256(price) = ADDITIONAL_FEED_PREISION) * amount) / PRECISION;
     }
 
-    function getAccountInformation() public external view returns(uint256 totalDscMinted,uint256 collateralValueInUsd){
-        (totalDscMinted,collateralValueInUsd) = _getAccountInformation(user);
+    function getAccountInformation()
+        public
+        view
+        returns (uint256 totalDscMinted, uint256 collateralValueInUsd)
+    {
+        (totalDscMinted, collateralValueInUsd) = _getAccountInformation(user);
     }
 }
